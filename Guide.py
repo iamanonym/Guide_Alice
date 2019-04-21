@@ -7,10 +7,13 @@ import json
 RASP_SERVER = 'https://api.rasp.yandex.net/v3.0/schedule/'
 TOWN_RASP_SERVER = 'https://api.rasp.yandex.net/v3.0/nearest_settlement/'
 GEOCODE_SERVER = 'https://geocode-maps.yandex.ru/1.x/'
+SEARCH_SERVER = 'https://search-maps.yandex.ru/v1/'
 RASP_API_KEY = 'a8069307-d318-473d-b178-2d1efd99580f'
+SEARCH_API_KEY = 'dda3ddba-c9ea-4ead-9010-f43fbc15c6e3'
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
+sessionStorage = {}
 
 
 class ResponseError(ConnectionError):
@@ -43,7 +46,7 @@ def search_town(lat, long):
         raise ErrorTillDoingRequest()
 
 
-@app.route('/post', methods=['POST'])
+@app.route('/guide', methods=['POST'])
 def main():
     logging.info('Request: %r', request.json)
 
@@ -61,23 +64,60 @@ def main():
 
 
 def handle_dialog(req, res):
+    user_id = req['session']['user_id']
     if req['session']['new']:
         res['response']['text'] = 'Привет! Я Навык-Путеводитель!' \
-                                  'Для начала работы, скажите, где Вы живете?'
+                                  ' Для начала работы, скажите, где Вы живете?'
+        sessionStorage[user_id] = {
+            'town': None
+        }
         return
+    if sessionStorage[user_id]['town'] is None:
+        town = get_city(req)
+        if not town:
+            res['response']['text'] = 'Извини, я не расслышала. ' \
+                                      'Повтори, пожалуйста!'
+            return
+        else:
+            res['response']['text'] = \
+                'Назовите какое-либо место, а я подскажу, ' \
+                'как до него добраться!'
+            sessionStorage[user_id]['town'] = \
+                req['request']['original_utterance']
+            return
+    place = req['request']['original_utterance']
+    res['response']['text'] = search_place(place)
 
 
 def get_city(req):
     cities = []
     for token in req['request']['nlu']['tokens']:
-        temp = check_exist(token)
+        temp = check_exist(token.lower())
         if temp is not None:
             cities.append(temp)
     return cities
 
 
-def check_exist(name_without_reg):
-    name = name_without_reg.lower()
+def search_place(name):
+    params = {'apikey': SEARCH_API_KEY,
+              'text': name,
+              'lang': 'ru_RU'}
+    try:
+        resp = requests.get(SEARCH_SERVER, params=params)
+    except Exception:
+        raise DoingResponseNotAble()
+    if resp:
+        json_file = resp.json()
+    else:
+        raise ErrorTillDoingRequest()
+    try:
+        temp = json_file['features'][0]['geometry']['coordinates']
+        return '{} {}'.format(*temp)
+    except KeyError:
+        return None
+
+
+def check_exist(name):
     params = {'geocode': name,
               'kind': 'locality',
               'format': 'json'}
@@ -104,4 +144,4 @@ def check_exist(name_without_reg):
 
 
 if __name__ == '__main__':
-    print(check_exist('Шакша'))
+    app.run()
