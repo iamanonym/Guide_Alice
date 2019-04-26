@@ -96,12 +96,17 @@ def handle_dialog(req, res):
         }
         return
     if sessionStorage[user_id]['town1'] is None:
-        town, pos = get_city(req)
-        if not town:
-            res['response']['text'] = 'Извини, я не расслышала. ' \
-                                      'Повтори, пожалуйста!'
+        try:
+            town, pos = get_city(req)
+        except TypeError:
+            res['response']['text'] = 'Мне кажется, это не город'
             return
-        else:
+        except ValueError:
+            res['response']['text'] = 'Мне кажется, это не город'
+            return
+        if not town or not pos:
+            res['response']['text'] = 'Мне кажется, это не город'
+        elif pos and town:
             check = search_town(pos[1], pos[0])
             if check:
                 sessionStorage[user_id]['c1'] = check
@@ -110,7 +115,7 @@ def handle_dialog(req, res):
                 'как до него добраться!'
             sessionStorage[user_id]['town1'] = \
                 req['request']['original_utterance']
-            return
+        return
     if sessionStorage[user_id]['status'] == 1:
         if req['request']['original_utterance'].lower() == 'да':
             city = sessionStorage[user_id]['cities']
@@ -141,22 +146,30 @@ def handle_dialog(req, res):
         elif temp.lower() == 'далее':
             start = sessionStorage[user_id]['start'] + 5
             features = sessionStorage[user_id]['cities'][start - 5: start]
-            var_text = 'Нашел следующие варианты:\n\n'
-            for feature in features:
-                var_text += '{} по ' \
-                            'адресу' \
-                            ' {}\n\n'.format(feature['properties']['name'],
-                                             feature['properties']['description'])
-            var_text += '\nВыберите один из них'
-            counter = 1
-            temp2 = [{'title': 'Далее', 'hide': True}]
-            while counter <= 5 and counter <= len(features):
-                temp2.append({'title': str(counter),
-                             'hide': True})
-                counter += 1
-            res['response']['buttons'] = temp2
-            res['response']['text'] = var_text
-            sessionStorage[user_id]['start'] = start
+            if len(features) > 0:
+                var_text = 'Нашел следующие варианты:\n\n'
+                for feature in features:
+                    var_text += \
+                        '{} по ' \
+                        'адресу' \
+                        ' {}\n\n'.format(feature['properties']['name'],
+                                        feature['properties']['description'])
+                var_text += '\nВыберите один из них'
+                counter = 1
+                temp2 = [{'title': 'Далее', 'hide': True}]
+                while counter <= 5 and counter <= len(features):
+                    temp2.append({'title': str(counter),
+                                 'hide': True})
+                    counter += 1
+                res['response']['buttons'] = temp2
+                res['response']['text'] = var_text
+                sessionStorage[user_id]['start'] = start
+            else:
+                res['response']['text'] = 'К сожалению, ничего не' \
+                                          ' найти не удалось.' \
+                                          ' Попробуйте найти что-то другое'
+                sessionStorage[user_id]['status'] = None
+
         else:
             res['response']['text'] = 'Некорректный запрос'
         return
@@ -215,7 +228,7 @@ def handle_dialog(req, res):
         ]
         sessionStorage[user_id]['status'] = 1
         sessionStorage[user_id]['cities'] = features[0]
-    else:
+    elif len(features) > 0:
         temp2 = [{'title': 'Далее', 'hide': True}]
         counter = 1
         while counter <= 5 and counter <= len(features):
@@ -232,6 +245,10 @@ def handle_dialog(req, res):
         res['response']['text'] = var_text
         sessionStorage[user_id]['status'] = 2
         sessionStorage[user_id]['cities'] = features
+    elif len(features) < 0:
+        res['response']['text'] = 'К сожалению, ничего не найти не удалось.' \
+                                  ' Попробуйте найти что-то другое'
+        sessionStorage[user_id]['status'] = None
 
 
 def create_answer(user_id, res, lat, long):
