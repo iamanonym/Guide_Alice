@@ -83,8 +83,8 @@ def handle_dialog(req, res):
     user_id = req['session']['user_id']
     if req['session']['new']:
         res['response']['text'] = 'Привет! Я Навык-Путеводитель!' \
-                                  ' Для начала работы, скажите, ' \
-                                  'где Вы находитесь?'
+                                  ' Для начала работы, назовите город, ' \
+                                  'где Вы находитесь'
         sessionStorage[user_id] = {
             'town1': None,
             'town2': None,
@@ -175,11 +175,16 @@ def handle_dialog(req, res):
         return
     elif sessionStorage[user_id]['status'] == 3:
         text = req['request']['original_utterance'].lower()
-        if text == 'на личном авто' or text == 'на такси':
+        if text == 'на личном авто':
             res['response']['text'] = \
                 'Удачной поездки!\nЕсли хотите обратиться снова,' \
                 ' введите, из какого города вы отправляетесь?'
             end_session(res, user_id)
+        elif text == 'на такси':
+            res['response']['text'] = \
+                'Удачной поездки! Яндекс.Такси домчит вас куда угодно)' \
+                '\nЕсли хотите обратиться снова,' \
+                ' введите, из какого города вы отправляетесь?'
         elif text == 'на общественном транспорте':
             sessionStorage[user_id]['status'] = 4
             res['response']['text'] = 'Когда вы хотите поехать?'
@@ -268,7 +273,7 @@ def create_answer(user_id, res, lat, long):
                                       ' добраться до этого места?'
             sessionStorage[user_id]['town2'] = None
             sessionStorage[user_id]['c2'] = None
-            res['response']['button'] = \
+            res['response']['buttons'] = \
                 [{'title': 'На личном авто', 'hide': True},
                  {'title': 'На такси', 'hide': True}]
         sessionStorage[user_id]['status'] = 3
@@ -284,7 +289,7 @@ def create_answer(user_id, res, lat, long):
         sessionStorage[user_id]['town2'] = None
         sessionStorage[user_id]['c2'] = None
         sessionStorage[user_id]['status'] = 3
-        res['response']['button'] = \
+        res['response']['buttons'] = \
             [{'title': 'На личном авто', 'hide': True},
              {'title': 'На такси', 'hide': True}]
 
