@@ -34,6 +34,10 @@ MONTHS = {1: 'января', 2: 'февраля', 3: 'марта', 4: 'апре�
 DAYS = {'января': 31, 'февраля': get_days_in_feb(), 'марта': 31,
         'апреля': 30, 'мая': 31, 'июня': 30, 'июля': 31, 'августа': 31,
         'сентября': 30, 'октября': 31, 'ноября': 30, 'декабря': 31}
+TRANSP_BUTTONS = [{'title': 'На общественном транспорте', 'hide': True},
+                  {'title': 'На личном авто', 'hide': True},
+                  {'title': 'На такси', 'hide': True},
+                  {'title': 'Пешком', 'hide': True}]
 
 
 # Базовый класс ошибки запроса
@@ -95,10 +99,23 @@ def handle_dialog(req, res):
         except ValueError:
             res['response']['text'] = 'Мне кажется, это не город'
             return
+        except DoingResponseNotAble:
+            res['response']['text'] = 'Мне кажется, это не город'
+            return
+        except ErrorTillDoingRequest:
+            res['response']['text'] = 'Мне кажется, это не город'
+            return
         if not town or not pos:
             res['response']['text'] = 'Мне кажется, это не город'
         elif pos and town:
-            check = search_town(pos[1], pos[0])
+            try:
+                check = search_town(pos[1], pos[0])
+            except ErrorTillDoingRequest:
+                res['response']['text'] = 'Мне кажется, это не город'
+                return
+            except DoingResponseNotAble:
+                res['response']['text'] = 'Мне кажется, это не город'
+                return
             if check:
                 sessionStorage[user_id]['c1'] = check
             res['response']['text'] = \
@@ -166,6 +183,8 @@ def ask_from_list(req, res, user_id):
             city = sessionStorage[user_id]['cities'][int(temp) + move - 6]
             if city:
                 lat, long = city['geometry']['coordinates']
+                sessionStorage[user_id]['place'] =\
+                    city['properties']['description']
                 ask_transp(user_id, res, lat, long)
             else:
                 res['response']['text'] = 'К сожалению, больше' \
@@ -185,9 +204,7 @@ def mover(res, user_id):
     if len(features) > 0:
         var_text = 'Нашел следующие варианты:\n\n'
         for feature in features:
-            var_text += \
-                '{} по ' \
-                'адресу' \
+            var_text += '{} по адресу' \
                 ' {}\n\n'.format(feature['properties']['name'],
                                  feature['properties']['description'])
         var_text += '\nВыберите один из них'
@@ -227,34 +244,32 @@ def check_transp(req, res, user_id):
             'Удачной поездки! Яндекс.Такси домчит вас куда угодно)' \
             '\nЕсли хотите обратиться снова,' \
             ' введите, из какого города вы отправляетесь?'
+        res['response']['buttons'] = [{'title': 'Сайт такси',
+                                       'url': 'https://taxi.yandex.ru/#index',
+                                       'hide': True}]
+        sessionStorage[user_id]['status'] = 5
     elif text == 'пешком':
         res['response']['text'] = \
-            'Удачной поездки!\nПо ссылке внизу (кнопка)' \
+            'Удачной прогулки!\nПо ссылке внизу (кнопка)' \
             ' доступен маршрут на авто'
         res['response']['buttons'] = \
             [{'title': 'Маршрут',
               'url':
                   get_map_url(get_pos(sessionStorage[user_id]['town1']),
-                              get_pos(sessionStorage[user_id]['town2']),
+                              get_pos(sessionStorage[user_id]['place']),
                               'pd'),
               'hide': True}]
         sessionStorage[user_id]['status'] = 5
-    elif text == 'на общественном транспорте':
+    elif text == 'на общественном транспорте' and \
+            sessionStorage[user_id]['transp_able']:
         sessionStorage[user_id]['status'] = 4
         res['response']['text'] = 'Когда вы хотите поехать?'
     else:
         res['response']['text'] = 'Некорректный запрос'
         if sessionStorage[user_id]['transp_able']:
-            res['response']['buttons'] = \
-                [{'title': 'На общественном транспорте', 'hide': True},
-                 {'title': 'На личном авто', 'hide': True},
-                 {'title': 'На такси', 'hide': True},
-                 {'title': 'Пешком', 'hide': True}]
+            res['response']['buttons'] = TRANSP_BUTTONS
         else:
-            res['response']['buttons'] = \
-                [{'title': 'На личном авто', 'hide': True},
-                 {'title': 'На такси', 'hide': True},
-                 {'title': 'Пешком', 'hide': True}]
+            res['response']['buttons'] = TRANSP_BUTTONS[1:]
 
 
 # Диалоговая функция; создает кнопку со ссылкой на расписание
@@ -288,21 +303,15 @@ def ask_transp(user_id, res, lat, long):
                                       'добраться до этого места?'
             sessionStorage[user_id]['town2'] = town
             sessionStorage[user_id]['c2'] = code
-            res['response']['buttons'] = \
-                [{'title': 'На общественном транспорте', 'hide': True},
-                 {'title': 'На личном авто', 'hide': True},
-                 {'title': 'На такси', 'hide': True},
-                 {'title': 'Пешком', 'hide': True}]
+            sessionStorage[user_id]['transp_able'] = True
+            res['response']['buttons'] = TRANSP_BUTTONS
         else:
             res['response']['text'] = 'Как предпочитаете' \
                                       ' добраться до этого места?'
             sessionStorage[user_id]['town2'] = None
             sessionStorage[user_id]['c2'] = None
             sessionStorage[user_id]['transp_able'] = False
-            res['response']['buttons'] = \
-                [{'title': 'На личном авто', 'hide': True},
-                 {'title': 'На такси', 'hide': True},
-                 {'title': 'Пешком', 'hide': True}]
+            res['response']['buttons'] = TRANSP_BUTTONS[1:]
         sessionStorage[user_id]['status'] = 3
     except DoingResponseNotAble:
         res['response']['text'] = 'Извините, но на сервере ' \
@@ -317,10 +326,7 @@ def ask_transp(user_id, res, lat, long):
         sessionStorage[user_id]['c2'] = None
         sessionStorage[user_id]['status'] = 3
         sessionStorage[user_id]['transp_able'] = False
-        res['response']['buttons'] = \
-            [{'title': 'На личном авто', 'hide': True},
-             {'title': 'На такси', 'hide': True},
-             {'title': 'Пешком', 'hide': True}]
+        res['response']['buttons'] = TRANSP_BUTTONS[1:]
 
 
 # Диалоговая функция показа вариантов поиска
@@ -369,9 +375,10 @@ def show_vars(req, res, user_id):
 # Поиск нпзвания города в строке
 def get_city(req):
     for token in req['request']['nlu']['tokens']:
-        temp, coord = check_exist(token.lower())
-        if temp is not None:
-            return temp, coord
+        if token != 'город' and token != 'село':
+            temp, coord = check_exist(token.lower())
+            if temp is not None:
+                return temp, coord
 
 
 # Поиск места
@@ -483,24 +490,17 @@ def get_map_url(pos1, pos2, mode):
 # Функция; возвращает координаты места
 def get_pos(arg):
     name = arg.lower()
-    geo_params = {'apikey': SEARCH_API_KEY,
-                  'text': name,
-                  'lang': 'ru_RU'}
     try:
-        res = requests.get(SEARCH_SERVER, params=geo_params)
-    except Exception:
-        raise DoingResponseNotAble()
-    if res:
-        try:
-            coord = \
-                res.json()['features'][0]['geometry']['coordinates']
-            return coord
-        except KeyError:
-            return None
-        except IndexError:
-            return None
-    else:
-        raise ErrorTillDoingRequest()
+        features = search_place(name)
+        return features[0]['geometry']['coordinates']
+    except KeyError:
+        return None
+    except IndexError:
+        return None
+    except DoingResponseNotAble:
+        return None
+    except ErrorTillDoingRequest:
+        return None
 
 
 if __name__ == '__main__':
